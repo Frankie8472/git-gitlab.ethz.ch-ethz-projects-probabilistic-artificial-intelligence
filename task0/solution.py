@@ -31,7 +31,7 @@ def generate_sample(n_samples, seed=None):
 from scipy.special import logsumexp
 
 
-def log_posterior_probs(x):
+def log_posterior_probs(x: np.ndarray):
     """
     Computes the log posterior probabilities for the three hypotheses, given the data x
 
@@ -44,6 +44,12 @@ def log_posterior_probs(x):
     assert x.ndim == 1
 
     # TODO: enter your code here
+    log_p = np.ndarray((3,))
+    log_proba_dens_func = list()
+    for idx, elem in enumerate(HYPOTHESIS_SPACE):
+        log_proba_dens_funczz = np.log(elem.logpdf(x))
+    log_proba_dens_func = HYPOTHESIS_SPACE
+    log_priors = np.log(PRIOR_PROBS)
 
     assert log_p.shape == (3,)
     return log_p

@@ -43,7 +43,13 @@ def log_posterior_probs(x):
     """
     assert x.ndim == 1
 
-    # TODO: enter your code here
+    log_proba_dens_func_X = np.ndarray((3,))
+    for idx, elem in enumerate(HYPOTHESIS_SPACE):
+        log_proba_dens_func_X[idx] = np.sum(elem.logpdf(x))
+    log_priors = np.log(PRIOR_PROBS)
+
+    log_p = log_proba_dens_func_X + log_priors
+    log_p -= logsumexp(log_p)
 
     assert log_p.shape == (3,)
     return log_p
