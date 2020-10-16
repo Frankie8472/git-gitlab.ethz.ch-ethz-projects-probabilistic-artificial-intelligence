@@ -64,7 +64,6 @@ class Model():
         """
             TODO: enter your code here
         """
-        self.DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
         self.model = None
         self.optimizer = None
