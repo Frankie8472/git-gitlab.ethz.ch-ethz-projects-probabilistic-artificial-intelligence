@@ -71,17 +71,15 @@ class Model():
         """
             TODO: enter your code here
         """
-        ## dummy code below
-        y = np.ones(test_x.shape[0]) * THRESHOLD - 0.00001
+        # dummy code below
+        # y = np.ones(test_x.shape[0]) * THRESHOLD - 0.00001
 
         # Get into evaluation (predictive posterior) mode
         self.model.eval()
         self.likelihood.eval()
 
-        # Test points are regularly spaced along [0,1]
         # Make predictions by feeding model through likelihood
         with torch.no_grad(), gpytorch.settings.fast_pred_var():
-            test_x = torch.linspace(0, 1, 51)
             observed_pred = self.likelihood(self.model(test_x))
 
         return observed_pred
