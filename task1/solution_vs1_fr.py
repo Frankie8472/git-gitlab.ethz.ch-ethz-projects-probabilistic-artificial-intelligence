@@ -1,5 +1,7 @@
 import gpytorch
 import numpy as np
+import gpytorch
+import torch
 
 ## Constant for Cost function
 import torch
@@ -65,7 +67,7 @@ class Model():
         self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
         self.model = None
         self.optimizer = None
-        pass
+        return
 
     def predict(self, test_x):
         """
