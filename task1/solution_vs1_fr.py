@@ -1,11 +1,8 @@
-import gpytorch
 import numpy as np
 import gpytorch
 import torch
 
 ## Constant for Cost function
-import torch
-
 THRESHOLD = 0.5
 W1 = 1
 W2 = 20
@@ -61,79 +58,55 @@ It uses predictions to compare to the ground truth using the cost_function above
 class Model():
 
     def __init__(self):
-        """
-            TODO: enter your code here
-        """
-        self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
+        self.likelihood = None
         self.model = None
-        self.optimizer = None
         return
 
     def predict(self, test_x):
-        """
-            TODO: enter your code here
-        """
-        # dummy code below
-        # y = np.ones(test_x.shape[0]) * THRESHOLD - 0.00001
+        test_x = torch.Tensor(test_x)
 
         # Get into evaluation (predictive posterior) mode
         self.model.eval()
         self.likelihood.eval()
 
-        test_x = torch.Tensor(test_x)
-
-        # if torch.cuda.is_available():
-        #    test_x = test_x.cuda()
-
         # Make predictions by feeding model through likelihood
-        with torch.no_grad():  # , gpytorch.settings.fast_pred_var():
+        with torch.no_grad():
             observed_pred = self.likelihood(self.model(test_x))
 
         return observed_pred
 
     def fit_model(self, train_x, train_y):
-        """
-             TODO: enter your code here
-        """
         train_x = torch.Tensor(train_x)
         train_y = torch.Tensor(train_y)
 
-        # if torch.cuda.is_available():
-        #     train_x = train_x.cuda()
-        #     train_y = train_y.cuda()
-
+        self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
         self.model = ExactGPModel(train_x, train_y, self.likelihood)
-
-        # if torch.cuda.is_available():
-        #     self.model = self.model.cuda()
-        #     self.likelihood = self.likelihood.cuda()
-
 
         # Find optimal model hyperparameters
         self.model.train()
         self.likelihood.train()
 
         # Use the adam optimizer
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.1)  # Includes GaussianLikelihood parameters
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.1)  # Includes GaussianLikelihood parameters
 
         # "Loss" for GPs - the marginal log likelihood
-        self.mll = gpytorch.mlls.ExactMarginalLogLikelihood(self.likelihood, self.model)
+        mll = gpytorch.mlls.ExactMarginalLogLikelihood(self.likelihood, self.model)
 
-        self.training_iter = 50
-        for i in range(self.training_iter):
+        training_iter = 50
+        for i in range(training_iter):
             # Zero gradients from previous iteration
-            self.optimizer.zero_grad()
+            optimizer.zero_grad()
             # Output from model
             output = self.model(train_x)
             # Calc loss and backprop gradients
-            loss = -self.mll(output, train_y)
+            loss = -mll(output, train_y)
             loss.backward()
             print('Iter %d/%d - Loss: %.3f   lengthscale: %.3f   noise: %.3f' % (
-                i + 1, self.training_iter, loss.item(),
+                i + 1, training_iter, loss.item(),
                 self.model.covar_module.base_kernel.lengthscale.item(),
                 self.model.likelihood.noise.item()
             ))
-            self.optimizer.step()
+            optimizer.step()
 
         return
 
