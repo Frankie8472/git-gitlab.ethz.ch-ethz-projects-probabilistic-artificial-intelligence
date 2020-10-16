@@ -119,7 +119,7 @@ class Model():
         # "Loss" for GPs - the marginal log likelihood
         self.mll = gpytorch.mlls.ExactMarginalLogLikelihood(self.likelihood, self.model)
 
-        self.training_iter = 10
+        self.training_iter = 18
         for i in range(self.training_iter):
             # Zero gradients from previous iteration
             self.optimizer.zero_grad()
