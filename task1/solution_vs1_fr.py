@@ -73,7 +73,7 @@ class Model():
         with torch.no_grad():
             observed_pred = self.likelihood(self.model(test_x))
 
-        return observed_pred
+        return observed_pred.mean.numpy()
 
     def fit_model(self, train_x, train_y):
         train_x = torch.Tensor(train_x)
