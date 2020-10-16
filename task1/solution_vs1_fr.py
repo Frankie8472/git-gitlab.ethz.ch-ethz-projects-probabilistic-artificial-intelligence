@@ -64,6 +64,7 @@ class Model():
         """
             TODO: enter your code here
         """
+        self.DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
         self.model = None
         self.optimizer = None
@@ -82,8 +83,11 @@ class Model():
 
         test_x = torch.Tensor(test_x)
 
+        # if torch.cuda.is_available():
+        #    test_x = test_x.cuda()
+
         # Make predictions by feeding model through likelihood
-        with torch.no_grad(), gpytorch.settings.fast_pred_var():
+        with torch.no_grad():  # , gpytorch.settings.fast_pred_var():
             observed_pred = self.likelihood(self.model(test_x))
 
         return observed_pred
@@ -95,7 +99,16 @@ class Model():
         train_x = torch.Tensor(train_x)
         train_y = torch.Tensor(train_y)
 
+        # if torch.cuda.is_available():
+        #     train_x = train_x.cuda()
+        #     train_y = train_y.cuda()
+
         self.model = ExactGPModel(train_x, train_y, self.likelihood)
+
+        # if torch.cuda.is_available():
+        #     self.model = self.model.cuda()
+        #     self.likelihood = self.likelihood.cuda()
+
 
         # Find optimal model hyperparameters
         self.model.train()
