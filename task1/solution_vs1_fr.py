@@ -80,6 +80,8 @@ class Model():
         self.model.eval()
         self.likelihood.eval()
 
+        test_x = torch.Tensor(test_x)
+
         # Make predictions by feeding model through likelihood
         with torch.no_grad(), gpytorch.settings.fast_pred_var():
             observed_pred = self.likelihood(self.model(test_x))
@@ -90,6 +92,9 @@ class Model():
         """
              TODO: enter your code here
         """
+        train_x = torch.Tensor(train_x)
+        train_y = torch.Tensor(train_y)
+
         self.model = ExactGPModel(train_x, train_y, self.likelihood)
 
         # Find optimal model hyperparameters
