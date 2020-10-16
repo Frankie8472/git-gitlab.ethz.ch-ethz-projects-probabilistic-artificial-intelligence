@@ -1,6 +1,9 @@
+import gpytorch
 import numpy as np
 
 ## Constant for Cost function
+import torch
+
 THRESHOLD = 0.5
 W1 = 1
 W2 = 20
@@ -59,6 +62,9 @@ class Model():
         """
             TODO: enter your code here
         """
+        self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
+        self.model = None
+        self.optimizer = None
         pass
 
     def predict(self, test_x):
@@ -67,13 +73,65 @@ class Model():
         """
         ## dummy code below
         y = np.ones(test_x.shape[0]) * THRESHOLD - 0.00001
-        return y
+
+        # Get into evaluation (predictive posterior) mode
+        self.model.eval()
+        self.likelihood.eval()
+
+        # Test points are regularly spaced along [0,1]
+        # Make predictions by feeding model through likelihood
+        with torch.no_grad(), gpytorch.settings.fast_pred_var():
+            test_x = torch.linspace(0, 1, 51)
+            observed_pred = self.likelihood(self.model(test_x))
+
+        return observed_pred
 
     def fit_model(self, train_x, train_y):
         """
              TODO: enter your code here
         """
-        pass
+        self.model = ExactGPModel(train_x, train_y, self.likelihood)
+
+        # Find optimal model hyperparameters
+        self.model.train()
+        self.likelihood.train()
+
+        # Use the adam optimizer
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.1)  # Includes GaussianLikelihood parameters
+
+        # "Loss" for GPs - the marginal log likelihood
+        self.mll = gpytorch.mlls.ExactMarginalLogLikelihood(self.likelihood, self.model)
+
+        self.training_iter = 50
+        for i in range(self.training_iter):
+            # Zero gradients from previous iteration
+            self.optimizer.zero_grad()
+            # Output from model
+            output = self.model(train_x)
+            # Calc loss and backprop gradients
+            loss = -self.mll(output, train_y)
+            loss.backward()
+            print('Iter %d/%d - Loss: %.3f   lengthscale: %.3f   noise: %.3f' % (
+                i + 1, self.training_iter, loss.item(),
+                self.model.covar_module.base_kernel.lengthscale.item(),
+                self.model.likelihood.noise.item()
+            ))
+            self.optimizer.step()
+
+        return
+
+
+# We will use the simplest form of GP model, exact inference
+class ExactGPModel(gpytorch.models.ExactGP):
+    def __init__(self, train_x, train_y, likelihood):
+        super(ExactGPModel, self).__init__(train_x, train_y, likelihood)
+        self.mean_module = gpytorch.means.ConstantMean()
+        self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
+
+    def forward(self, x):
+        mean_x = self.mean_module(x)
+        covar_x = self.covar_module(x)
+        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
 
 def main():
