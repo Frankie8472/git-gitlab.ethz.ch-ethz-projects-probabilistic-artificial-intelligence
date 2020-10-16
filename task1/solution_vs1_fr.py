@@ -83,10 +83,10 @@ class Model():
         test_x = torch.Tensor(test_x)
 
         # Make predictions by feeding model through likelihood
-        with torch.no_grad(), gpytorch.settings.fast_pred_var():
+        with torch.no_grad():
             observed_pred = self.likelihood(self.model(test_x))
 
-        return observed_pred
+        return observed_pred.mean.numpy()
 
     def fit_model(self, train_x, train_y):
         """
@@ -107,7 +107,7 @@ class Model():
         # "Loss" for GPs - the marginal log likelihood
         self.mll = gpytorch.mlls.ExactMarginalLogLikelihood(self.likelihood, self.model)
 
-        self.training_iter = 50
+        self.training_iter = 10
         for i in range(self.training_iter):
             # Zero gradients from previous iteration
             self.optimizer.zero_grad()
@@ -154,6 +154,8 @@ def main():
     M.fit_model(train_x, train_y)
     prediction = M.predict(test_x)
 
+    print(type(prediction))
+    print(np.shape(prediction))
     print(prediction)
 
 
