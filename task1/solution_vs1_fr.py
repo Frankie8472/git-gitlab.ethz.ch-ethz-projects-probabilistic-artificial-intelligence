@@ -3,6 +3,8 @@ import gpytorch
 import torch
 
 ## Constant for Cost function
+from torch.autograd import Variable
+
 THRESHOLD = 0.5
 W1 = 1
 W2 = 20
@@ -17,30 +19,64 @@ def cost_function(true, predicted):
 
         return: float
     """
-    cost = (true - predicted)**2
+    cost = (true - predicted) ** 2
 
     # true above threshold (case 1)
     mask = true > THRESHOLD
-    mask_w1 = np.logical_and(predicted>=true,mask)
-    mask_w2 = np.logical_and(np.logical_and(predicted<true,predicted >=THRESHOLD),mask)
-    mask_w3 = np.logical_and(predicted<THRESHOLD,mask)
+    mask_w1 = np.logical_and(predicted >= true, mask)
+    mask_w2 = np.logical_and(np.logical_and(predicted < true, predicted >= THRESHOLD), mask)
+    mask_w3 = np.logical_and(predicted < THRESHOLD, mask)
 
-    cost[mask_w1] = cost[mask_w1]*W1
-    cost[mask_w2] = cost[mask_w2]*W2
-    cost[mask_w3] = cost[mask_w3]*W3
+    cost[mask_w1] = cost[mask_w1] * W1
+    cost[mask_w2] = cost[mask_w2] * W2
+    cost[mask_w3] = cost[mask_w3] * W3
 
     # true value below threshold (case 2)
     mask = true <= THRESHOLD
-    mask_w1 = np.logical_and(predicted>true,mask)
-    mask_w2 = np.logical_and(predicted<=true,mask)
+    mask_w1 = np.logical_and(predicted > true, mask)
+    mask_w2 = np.logical_and(predicted <= true, mask)
 
-    cost[mask_w1] = cost[mask_w1]*W1
-    cost[mask_w2] = cost[mask_w2]*W2
+    cost[mask_w1] = cost[mask_w1] * W1
+    cost[mask_w2] = cost[mask_w2] * W2
 
-    reward = W4*np.logical_and(predicted < THRESHOLD,true<THRESHOLD)
+    reward = W4 * np.logical_and(predicted < THRESHOLD, true < THRESHOLD)
     if reward is None:
         reward = 0
     return np.mean(cost) - np.mean(reward)
+
+
+def cost_function_torch(true, predicted):
+    """
+        true: true values in 1D numpy array
+        predicted: predicted values in 1D numpy array
+
+        return: float
+    """
+    cost = torch.square(torch.sub(true, predicted))
+
+    # true above threshold (case 1)
+    mask = torch.gt(true, THRESHOLD)
+    mask_w1 = torch.logical_and(torch.ge(predicted, true), mask)
+    mask_w2 = torch.logical_and(torch.logical_and(torch.lt(predicted, true), torch.ge(predicted, THRESHOLD)), mask)
+    mask_w3 = torch.logical_and(torch.lt(predicted, THRESHOLD), mask)
+
+    cost[mask_w1] = cost[mask_w1] * W1
+    cost[mask_w2] = cost[mask_w2] * W2
+    cost[mask_w3] = cost[mask_w3] * W3
+
+    # true value below threshold (case 2)
+    mask = torch.le(true, THRESHOLD)
+    mask_w1 = torch.logical_and(torch.gt(predicted, true), mask)
+    mask_w2 = torch.logical_and(torch.le(predicted, true), mask)
+
+    cost[mask_w1] = cost[mask_w1] * W1
+    cost[mask_w2] = cost[mask_w2] * W2
+
+    reward = W4 * torch.logical_and(torch.lt(predicted, THRESHOLD), torch.lt(true,  THRESHOLD))
+    if reward is None:
+        reward = 0
+    return torch.sub(torch.mean(cost), torch.mean(reward))
+
 
 """
 Fill in the methods of the Model. Please do not change the given methods for the checker script to work.
@@ -86,13 +122,13 @@ class Model():
         self.model.train()
         self.likelihood.train()
 
-        # Use the adam optimizer
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.1)  # Includes GaussianLikelihood parameters
+        # Use the adam optimizer 21 4e-1 1e-5
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=5e-1, weight_decay=1e-4)  # Includes GaussianLikelihood parameters
 
         # "Loss" for GPs - the marginal log likelihood
         mll = gpytorch.mlls.ExactMarginalLogLikelihood(self.likelihood, self.model)
 
-        training_iter = 50
+        training_iter = 21
         for i in range(training_iter):
             # Zero gradients from previous iteration
             optimizer.zero_grad()
@@ -100,6 +136,7 @@ class Model():
             output = self.model(train_x)
             # Calc loss and backprop gradients
             loss = -mll(output, train_y)
+            #loss = Variable(cost_function_torch(train_y, output.mean), requires_grad=True)
             loss.backward()
             print('Iter %d/%d - Loss: %.3f   lengthscale: %.3f   noise: %.3f' % (
                 i + 1, training_iter, loss.item(),
@@ -107,7 +144,8 @@ class Model():
                 self.model.likelihood.noise.item()
             ))
             optimizer.step()
-
+            if (loss.item().abs() <= 0.005) and (self.model.covar_module.base_kernel.lengthscale.item().abs() <= 0.005) and (self.model.likelihood.noise.item().abs() <= 0.005):
+                break
         return
 
 
@@ -115,7 +153,7 @@ class Model():
 class ExactGPModel(gpytorch.models.ExactGP):
     def __init__(self, train_x, train_y, likelihood):
         super(ExactGPModel, self).__init__(train_x, train_y, likelihood)
-        self.mean_module = gpytorch.means.ZeroMean()
+        self.mean_module = gpytorch.means.LinearMean(2)
         self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
 
     def forward(self, x):
