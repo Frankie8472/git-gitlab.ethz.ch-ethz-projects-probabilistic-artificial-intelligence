@@ -128,7 +128,7 @@ class Model():
         # "Loss" for GPs - the marginal log likelihood
         mll = gpytorch.mlls.ExactMarginalLogLikelihood(self.likelihood, self.model)
 
-        training_iter = 21
+        training_iter = 50
         for i in range(training_iter):
             # Zero gradients from previous iteration
             optimizer.zero_grad()
@@ -144,7 +144,7 @@ class Model():
                 self.model.likelihood.noise.item()
             ))
             optimizer.step()
-            if (loss.item().abs() <= 0.005) and (self.model.covar_module.base_kernel.lengthscale.item().abs() <= 0.005) and (self.model.likelihood.noise.item().abs() <= 0.005):
+            if (torch.abs(loss.item()) <= 0.005) and (torch.abs(self.model.covar_module.base_kernel.lengthscale.item()) <= 0.005) and (torch.abs(self.model.likelihood.noise.item()) <= 0.005):
                 break
         return
 
