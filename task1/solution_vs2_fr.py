@@ -1,4 +1,5 @@
 import numpy as np
+from sklearn.ensemble import BaggingRegressor, AdaBoostRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel, DotProduct
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.pipeline import Pipeline
@@ -19,30 +20,31 @@ def cost_function(true, predicted):
 
         return: float
     """
-    cost = (true - predicted)**2
+    cost = (true - predicted) ** 2
 
     # true above threshold (case 1)
     mask = true > THRESHOLD
-    mask_w1 = np.logical_and(predicted>=true,mask)
-    mask_w2 = np.logical_and(np.logical_and(predicted<true,predicted >=THRESHOLD),mask)
-    mask_w3 = np.logical_and(predicted<THRESHOLD,mask)
+    mask_w1 = np.logical_and(predicted >= true, mask)
+    mask_w2 = np.logical_and(np.logical_and(predicted < true, predicted >= THRESHOLD), mask)
+    mask_w3 = np.logical_and(predicted < THRESHOLD, mask)
 
-    cost[mask_w1] = cost[mask_w1]*W1
-    cost[mask_w2] = cost[mask_w2]*W2
-    cost[mask_w3] = cost[mask_w3]*W3
+    cost[mask_w1] = cost[mask_w1] * W1
+    cost[mask_w2] = cost[mask_w2] * W2
+    cost[mask_w3] = cost[mask_w3] * W3
 
     # true value below threshold (case 2)
     mask = true <= THRESHOLD
-    mask_w1 = np.logical_and(predicted>true,mask)
-    mask_w2 = np.logical_and(predicted<=true,mask)
+    mask_w1 = np.logical_and(predicted > true, mask)
+    mask_w2 = np.logical_and(predicted <= true, mask)
 
-    cost[mask_w1] = cost[mask_w1]*W1
-    cost[mask_w2] = cost[mask_w2]*W2
+    cost[mask_w1] = cost[mask_w1] * W1
+    cost[mask_w2] = cost[mask_w2] * W2
 
-    reward = W4*np.logical_and(predicted < THRESHOLD,true<THRESHOLD)
+    reward = W4 * np.logical_and(predicted < THRESHOLD, true < THRESHOLD)
     if reward is None:
         reward = 0
     return np.mean(cost) - np.mean(reward)
+
 
 """
 Fill in the methods of the Model. Please do not change the given methods for the checker script to work.
@@ -60,28 +62,45 @@ It uses predictions to compare to the ground truth using the cost_function above
 class Model():
     def __init__(self):
         print("==> Initializing")
-        kernel1 = ConstantKernel(1.0, (1e-3, 1e3)) * RBF(10, (1e-2, 1e2))
-        kernel2 = DotProduct(sigma_0=0.0)
-        self.nystroem = Nystroem(kernel=kernel1, random_state=1, n_components=20)
-        self.model = GaussianProcessRegressor(kernel=kernel2, alpha=0.1**2, n_restarts_optimizer=0)
+        kernel = ConstantKernel(2.0, (1e-3, 1e3)) * RBF(10, (1e-2, 1e2))
+        gpr = GaussianProcessRegressor(
+            kernel=kernel,
+            alpha=1e-2,
+            n_restarts_optimizer=0,
+            normalize_y=False
+        )
+        self.model = BaggingRegressor(
+            base_estimator=gpr,
+            n_estimators=2,
+            max_samples=1000,
+            max_features=1.0,
+            bootstrap=False,
+            bootstrap_features=False,
+            verbose=1
+        )
+
+        self.model2 = AdaBoostRegressor(
+            base_estimator=gpr,
+            n_estimators=30,
+            learning_rate=1.0,
+            loss='linear'
+        )
+
         return
 
     def predict(self, test_x):
         print("==> Predicting")
-        print("====> Nystroem")
-        test_x = self.nystroem.transform(test_x)
-        print("====> MatMul")
-        #test_x = test_x @ test_x.T
-        print("====> GPR")
-        return self.model.predict(test_x)
+        print("====> Bagging with Subsampling")
+        y_preds = list()
+        for model in self.model.estimators_:
+            y_pred_mean, y_pred_std = model.predict(test_x, return_std=True)
+            y_pred = y_pred_mean - 0.1 * y_pred_std
+            y_preds.append(y_pred)
+        return np.asarray(y_preds).mean(axis=0)
 
     def fit_model(self, train_x, train_y):
         print("==> Training")
-        print("====> Nystroem")
-        train_x = self.nystroem.fit_transform(train_x, train_y)
-        print("====> MatMul")
-        #train_x = train_x @ train_x.T
-        print("====> GPR")
+        print("====> Bagging with Subsampling")
         self.model.fit(train_x, train_y)
         return
 
