@@ -1,4 +1,5 @@
 import numpy as np
+import pathos.multiprocessing as mp
 from sklearn.ensemble import BaggingRegressor, AdaBoostRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel, DotProduct
 from sklearn.gaussian_process import GaussianProcessRegressor
@@ -12,6 +13,7 @@ W2 = 20
 W3 = 100
 W4 = 0.04
 SEED = 42
+CORES = mp.cpu_count()
 
 
 def cost_function(true, predicted):
@@ -66,19 +68,19 @@ class Model():
         gpr = GaussianProcessRegressor(
             kernel=kernel,
             alpha=1e-3,
-            n_restarts_optimizer=1,
+            n_restarts_optimizer=2,
             normalize_y=True,
             random_state=SEED
         )
         self.model = BaggingRegressor(
             base_estimator=gpr,
-            n_estimators=30,
-            max_samples=2000,
+            n_estimators=16,
+            max_samples=1000,
             max_features=1.0,
             bootstrap=False,
             bootstrap_features=False,
-            verbose=1,
-            n_jobs=4,
+            verbose=0,
+            n_jobs=CORES,
             random_state=SEED
         )
 
@@ -97,7 +99,7 @@ class Model():
         y_preds = list()
         for model in self.model.estimators_:
             y_pred_mean, y_pred_std = model.predict(test_x, return_std=True)
-            y_pred = y_pred_mean + y_pred_std
+            y_pred = y_pred_mean + 1.2 * y_pred_std
             y_preds.append(y_pred)
         return np.asarray(y_preds).mean(axis=0)
 
