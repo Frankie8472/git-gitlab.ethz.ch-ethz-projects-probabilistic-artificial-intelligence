@@ -11,6 +11,7 @@ W1 = 1
 W2 = 20
 W3 = 100
 W4 = 0.04
+SEED = 42
 
 
 def cost_function(true, predicted):
@@ -20,31 +21,30 @@ def cost_function(true, predicted):
 
         return: float
     """
-    cost = (true - predicted) ** 2
+    cost = (true - predicted)**2
 
     # true above threshold (case 1)
     mask = true > THRESHOLD
-    mask_w1 = np.logical_and(predicted >= true, mask)
-    mask_w2 = np.logical_and(np.logical_and(predicted < true, predicted >= THRESHOLD), mask)
-    mask_w3 = np.logical_and(predicted < THRESHOLD, mask)
+    mask_w1 = np.logical_and(predicted>=true,mask)
+    mask_w2 = np.logical_and(np.logical_and(predicted<true,predicted >=THRESHOLD),mask)
+    mask_w3 = np.logical_and(predicted<THRESHOLD,mask)
 
-    cost[mask_w1] = cost[mask_w1] * W1
-    cost[mask_w2] = cost[mask_w2] * W2
-    cost[mask_w3] = cost[mask_w3] * W3
+    cost[mask_w1] = cost[mask_w1]*W1
+    cost[mask_w2] = cost[mask_w2]*W2
+    cost[mask_w3] = cost[mask_w3]*W3
 
     # true value below threshold (case 2)
     mask = true <= THRESHOLD
-    mask_w1 = np.logical_and(predicted > true, mask)
-    mask_w2 = np.logical_and(predicted <= true, mask)
+    mask_w1 = np.logical_and(predicted>true,mask)
+    mask_w2 = np.logical_and(predicted<=true,mask)
 
-    cost[mask_w1] = cost[mask_w1] * W1
-    cost[mask_w2] = cost[mask_w2] * W2
+    cost[mask_w1] = cost[mask_w1]*W1
+    cost[mask_w2] = cost[mask_w2]*W2
 
-    reward = W4 * np.logical_and(predicted < THRESHOLD, true < THRESHOLD)
+    reward = W4*np.logical_and(predicted < THRESHOLD,true<THRESHOLD)
     if reward is None:
         reward = 0
     return np.mean(cost) - np.mean(reward)
-
 
 """
 Fill in the methods of the Model. Please do not change the given methods for the checker script to work.
@@ -62,29 +62,32 @@ It uses predictions to compare to the ground truth using the cost_function above
 class Model():
     def __init__(self):
         print("==> Initializing")
-        kernel = ConstantKernel(2.0, (1e-3, 1e3)) * RBF(10, (1e-2, 1e2))
+        kernel = RBF()
         gpr = GaussianProcessRegressor(
             kernel=kernel,
-            alpha=1e-2,
-            n_restarts_optimizer=0,
-            normalize_y=False
+            alpha=1e-3,
+            n_restarts_optimizer=1,
+            normalize_y=True,
+            random_state=SEED
         )
         self.model = BaggingRegressor(
             base_estimator=gpr,
-            n_estimators=2,
-            max_samples=1000,
+            n_estimators=30,
+            max_samples=2000,
             max_features=1.0,
             bootstrap=False,
             bootstrap_features=False,
-            verbose=1
+            verbose=1,
+            n_jobs=4,
+            random_state=SEED
         )
 
-        self.model2 = AdaBoostRegressor(
-            base_estimator=gpr,
-            n_estimators=30,
-            learning_rate=1.0,
-            loss='linear'
-        )
+        # self.model2 = AdaBoostRegressor(
+        #     base_estimator=gpr,
+        #     n_estimators=30,
+        #     learning_rate=1.0,
+        #     loss='linear'
+        # )
 
         return
 
@@ -94,7 +97,7 @@ class Model():
         y_preds = list()
         for model in self.model.estimators_:
             y_pred_mean, y_pred_std = model.predict(test_x, return_std=True)
-            y_pred = y_pred_mean - 0.1 * y_pred_std
+            y_pred = y_pred_mean + y_pred_std
             y_preds.append(y_pred)
         return np.asarray(y_preds).mean(axis=0)
 
