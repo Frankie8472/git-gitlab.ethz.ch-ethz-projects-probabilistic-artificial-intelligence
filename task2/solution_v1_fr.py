@@ -7,8 +7,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import TensorDataset
 from tqdm import trange, tqdm
-import keras
-keras.losses.kullback_leibler_divergence
+
 
 def ece(probs, labels, n_bins=30):
     """
@@ -116,14 +115,14 @@ class BayesianLayer(torch.nn.Module):
 
         # TODO: enter your code here
         self.prior_mu = 0  # mean of prior normal distribution
-        self.prior_sigma = 0.05  # sigma of prior normal distribution
+        self.prior_sigma = 0.1  # sigma of prior normal distribution
         self.prior_logsigma = np.log(self.prior_sigma)
-        self.weight_mu = nn.Parameter(torch.zeros(output_dim, input_dim))
-        self.weight_logsigma = nn.Parameter(torch.zeros(output_dim, input_dim))
+        self.weight_mu = nn.Parameter(torch.Tensor(output_dim, input_dim).normal_(0, 0.1))
+        self.weight_logsigma = nn.Parameter(torch.Tensor(output_dim, input_dim).normal_(-7, 0.1))
 
         if self.use_bias:
-            self.bias_mu = nn.Parameter(torch.zeros(output_dim))
-            self.bias_logsigma = nn.Parameter(torch.zeros(output_dim))
+            self.bias_mu = nn.Parameter(torch.Tensor(output_dim).normal_(0, 0.1))
+            self.bias_logsigma = nn.Parameter(torch.Tensor(output_dim).normal_(0, 0.1))
         else:
             self.register_parameter('bias_mu', None)
             self.register_parameter('bias_logsigma', None)
@@ -157,8 +156,10 @@ class BayesianLayer(torch.nn.Module):
         """
 
         # TODO: enter your code here
-        kl = self.prior_logsigma - logsigma + (torch.exp(2*logsigma) + (mu-self.prior_mu)**2)/(2*np.exp(2*self.prior_logsigma)) - 0.5
-        return kl.sum()
+        p = torch.distributions.normal.Normal(mu, logsigma)
+        q = torch.distributions.normal.Normal(self.prior_mu, self.prior_sigma)
+        kl = torch.distributions.kl_divergence(p, q)
+        return kl.mean()
 
 
 class BayesNet(torch.nn.Module):
@@ -183,11 +184,14 @@ class BayesNet(torch.nn.Module):
     def predict_class_probs(self, x, num_forward_passes=10):
         assert x.shape[1] == 28 ** 2
         batch_size = x.shape[0]
-        print("here==============")
         # TODO: make n random forward passes
         # compute the categorical softmax probabilities
         # marginalize the probabilities over the n forward passes
-        probs = torch.mean(torch.Tensor([F.softmax(self.forward(x), dim=1) for _ in range(num_forward_passes)]), dim=1)
+        probs = F.softmax(self.forward(x), dim=1)
+        for _ in range(num_forward_passes-1):
+            probs += F.softmax(self.forward(x), dim=1)
+        probs /= num_forward_passes
+
         assert probs.shape == (batch_size, 10)
         return probs
 
@@ -199,7 +203,7 @@ class BayesNet(torch.nn.Module):
         kl = 0.0
         n = 0
         for layer in self.net.modules():
-            if isinstance(layer, BayesianLayer):
+            if isinstance(layer, (BayesianLayer)):
                 kl += layer.kl_divergence()
                 n += 1
 
@@ -217,7 +221,7 @@ def train_network(model, optimizer, train_loader, num_epochs=100, pbar_update_in
     criterion = torch.nn.CrossEntropyLoss()  # always used in this assignment
 
     pbar = trange(num_epochs)
-    for i in pbar:
+    for _ in pbar:
         for k, (batch_x, batch_y) in enumerate(train_loader):
             model.zero_grad()
             y_pred = model(batch_x)
@@ -225,7 +229,7 @@ def train_network(model, optimizer, train_loader, num_epochs=100, pbar_update_in
             if type(model) == BayesNet:
                 # BayesNet implies additional KL-loss.
                 # TODO: enter your code here
-                loss += 0.1 * model.kl_loss()
+                loss += model.kl_loss()
             loss.backward()
             optimizer.step()
 
@@ -326,8 +330,9 @@ def evaluate_model(model, model_type, test_loader, batch_size, extended_eval, pr
 
 
 def main(test_loader=None, private_test=False):
-    num_epochs = 100  # You might want to adjust this
-    batch_size = 128  # Try playing around with this
+    torch.manual_seed(42)
+    num_epochs = 20  # You might want to adjust this
+    batch_size = 512  # Try playing around with this
     print_interval = 100
     learning_rate = 5e-4  # Try playing around with this
     model_type = "bayesnet"  # Try changing this to "densenet" as a comparison
