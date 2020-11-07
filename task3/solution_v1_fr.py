@@ -1,8 +1,10 @@
 import numpy as np
 from scipy.optimize import fmin_l_bfgs_b
+from sklearn.gaussian_process.kernels import Matern
+from GPyOpt.methods import BayesianOptimization
+from GPy.kern import Matern52
 
 domain = np.array([[0, 5]])
-
 
 """ Solution """
 
@@ -10,10 +12,31 @@ domain = np.array([[0, 5]])
 class BO_algo():
     def __init__(self):
         """Initializes the algorithm with a parameter configuration. """
+        self.bounds = np.array([[0.0, 5.0]])
+        self.sigma_f = 0.15
+        self.sigma_v = 0.0001
+        self.noise_f = None
+        self.noise_v = None
+        self.bds = bds = [{'name': 'X', 'type': 'continuous', 'domain': self.bounds.ravel()}]
+        self.kernel_f = Matern52(input_dim=1, lengthscale=0.5, variance=0.5, nu=2.5)
+        self.kernel_v = Matern52(input_dim=1, lengthscale=0.5, variance=2 ** (1 / 2), nu=2.5)
+        self.v_min = 1.2
+        self.optimizer = BayesianOptimization(
+            f=f,
+            domain=bds,
+            model_type='GP',
+            kernel=kernel,
+            acquisition_type='EI',
+            acquisition_jitter=0.01,
+            X=X_init,
+            Y=-Y_init,
+            noise_var=noise ** 2,
+            exact_feval=False,
+            normalize_Y=False,
+            maximize=True)
 
         # TODO: enter your code here
         pass
-
 
     def next_recommendation(self):
         """
@@ -28,7 +51,6 @@ class BO_algo():
         # TODO: enter your code here
         # In implementing this function, you may use optimize_acquisition_function() defined below.
         raise NotImplementedError
-
 
     def optimize_acquisition_function(self):
         """
@@ -76,7 +98,6 @@ class BO_algo():
         # TODO: enter your code here
         raise NotImplementedError
 
-
     def add_data_point(self, x, f, v):
         """
         Add data points to the model.
@@ -109,6 +130,7 @@ class BO_algo():
 
 
 """ Toy problem to check code works as expected """
+
 
 def check_in_domain(x):
     """Validate input"""
