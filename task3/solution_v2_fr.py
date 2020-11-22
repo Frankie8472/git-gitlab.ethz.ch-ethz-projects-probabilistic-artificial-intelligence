@@ -126,8 +126,8 @@ class BO_algo:
             Model training speed
         """
         # TODO: enter your code here
-        self.f_model.fit(x, f)
-        self.v_model.fit(x, v)
+        self.f_model.fit(x.reshape(1, -1), f)
+        self.v_model.fit(x.reshape(1, -1), v)
 
         if self.x is None:
             self.x = x
@@ -151,10 +151,9 @@ class BO_algo:
         # TODO: enter your code here
         solution = None
         for idx, item in enumerate(self.x):
-            print(self.v[idx][0])
-
             if self.v[idx][0] >= self.v_min and (solution is None or item[0] > solution):
                 solution = item[0]
+        print("end")
         return solution
 
 
@@ -188,10 +187,11 @@ def main():
         x = agent.next_recommendation()
 
         # Check for valid shape
+        """"
         assert x.shape == (1, domain.shape[0]), \
             f"The function next recommendation must return a numpy array of " \
             f"shape (1, {domain.shape[0]})"
-
+        """
         # Obtain objective and constraint observation
         obj_val = f(x)
         cost_val = v(x)
