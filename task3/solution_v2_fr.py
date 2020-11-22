@@ -1,11 +1,9 @@
-import warnings
-
-warnings.filterwarnings("ignore")
-
 import numpy as np
 from sklearn.gaussian_process.kernels import Matern
 from sklearn.gaussian_process import GaussianProcessRegressor
 from scipy.optimize import fmin_l_bfgs_b
+import warnings
+warnings.filterwarnings("ignore")
 
 domain = np.array([[0, 5]])
 
@@ -32,7 +30,7 @@ class BO_algo:
         self.v_mean = 1.5
         self.v_min = 1.2
 
-        self.x = np.random.rand(4, 1) * 5
+        self.x = None
         self.f = None
         self.v = None
 
@@ -56,8 +54,8 @@ class BO_algo:
 
         # TODO: enter your code here
         # In implementing this function, you may use optimize_acquisition_function() defined below.
-        if self.f is None:
-            recommendation = self.x
+        if self.x is None:
+            recommendation = domain[:, 0] + (domain[:, 1] - domain[:, 0]) * np.random.rand(domain.shape[0])
         else:
             recommendation = self.optimize_acquisition_function()
         return recommendation
@@ -80,10 +78,8 @@ class BO_algo:
 
         # Restarts the optimization 20 times and pick best solution
         for _ in range(20):
-            x0 = domain[:, 0] + (domain[:, 1] - domain[:, 0]) * \
-                 np.random.rand(domain.shape[0])
-            result = fmin_l_bfgs_b(objective, x0=x0, bounds=domain,
-                                   approx_grad=True)
+            x0 = domain[:, 0] + (domain[:, 1] - domain[:, 0]) * np.random.rand(domain.shape[0])
+            result = fmin_l_bfgs_b(objective, x0=x0, bounds=domain, approx_grad=True)
             x_values.append(np.clip(result[0], *domain[0]))
             f_values.append(-result[1])
 
@@ -133,12 +129,12 @@ class BO_algo:
         self.f_model.fit(x, f)
         self.v_model.fit(x, v)
 
-        self.x = np.vstack((self.x, x))
-
-        if self.f is None:
+        if self.x is None:
+            self.x = x
             self.f = f
             self.v = v
         else:
+            self.x = np.vstack((self.x, x))
             self.f = np.vstack((self.f, f))
             self.v = np.vstack((self.v, v))
         return
@@ -155,6 +151,8 @@ class BO_algo:
         # TODO: enter your code here
         solution = None
         for idx, item in enumerate(self.x):
+            print(self.v[idx][0])
+
             if self.v[idx][0] >= self.v_min and (solution is None or item[0] > solution):
                 solution = item[0]
         return solution
