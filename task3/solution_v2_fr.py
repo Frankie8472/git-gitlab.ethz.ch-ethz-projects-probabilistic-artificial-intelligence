@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.gaussian_process.kernels import Matern
+from sklearn.gaussian_process.kernels import Matern, ConstantKernel, WhiteKernel, Product, Sum
 from sklearn.gaussian_process import GaussianProcessRegressor
 from scipy.optimize import fmin_l_bfgs_b
 import warnings
@@ -17,15 +17,13 @@ class BO_algo:
         """Initializes the algorithm with a parameter configuration. """
 
         # TODO: enter your code here
-        self.seed = 42
-
-        self.domain = np.array([[0.0, 5.0]])
-
-        self.f_sigma = 0.5
+        self.f_sigma = 0.15
+        self.f_var = 0.5
         self.f_lengthscale = 0.5
         self.f_nu = 2.5
 
-        self.v_sigma = np.sqrt(2)
+        self.v_sigma = 0.0001
+        self.v_var = np.sqrt(2)
         self.v_lengthscale = 0.5
         self.v_nu = 2.5
         self.v_mean = 1.5
@@ -35,12 +33,11 @@ class BO_algo:
         self.f = None
         self.v = None
 
-        self.f_kernel = self.f_sigma * Matern(length_scale=self.f_lengthscale, length_scale_bounds='fixed', nu=self.f_nu)
-        self.f_model = GaussianProcessRegressor(kernel=self.f_kernel, random_state=seed)
+        self.f_kernel = Product(ConstantKernel(self.f_var, 'fixed'), Matern(self.f_lengthscale, 'fixed', self.f_nu))
+        self.f_model = GaussianProcessRegressor(self.f_kernel, self.f_sigma, seed)
 
-        # TODO find out if mean is correctly added
-        self.v_kernel = self.v_sigma * Matern(length_scale=self.v_lengthscale, length_scale_bounds='fixed', nu=self.v_nu)
-        self.v_model = GaussianProcessRegressor(kernel=self.v_kernel, random_state=seed)
+        self.v_kernel = Sum(ConstantKernel(self.v_mean, 'fixed'), Product(ConstantKernel(self.v_var, 'fixed'), Matern(self.v_lengthscale, 'fixed', self.v_nu)))
+        self.v_model = GaussianProcessRegressor(self.v_kernel, self.v_sigma, seed)
         return
 
     def next_recommendation(self):
@@ -55,11 +52,7 @@ class BO_algo:
 
         # TODO: enter your code here
         # In implementing this function, you may use optimize_acquisition_function() defined below.
-        if self.x is None:
-            recommendation = domain[:, 0] + (domain[:, 1] - domain[:, 0]) * np.random.rand(domain.shape[0])
-        else:
-            recommendation = self.optimize_acquisition_function()
-        return recommendation
+        return self.optimize_acquisition_function()
 
     def optimize_acquisition_function(self):
         """
@@ -106,12 +99,11 @@ class BO_algo:
         f_mean, f_std = self.f_model.predict(x.reshape(1, -1), return_std=True)
         v_mean, v_std = self.v_model.predict(x.reshape(1, -1), return_std=True)
 
-        beta = 1   # TODO: Hyperparameter tuning of beta
-        v = self.v_mean + v_mean[0] - v_std[0]
+        v = v_mean[0] - v_std[0]
 
-        # A larger v means more exploration, a smaller v means more exploitation
-        af_value = f_mean[0] + beta/v * f_std[0]
-        return af_value
+        if v < self.v_min:
+            return domain[:, 0]
+        return f_mean[0] + (self.v_min/v)**2*f_std[0]
 
     def add_data_point(self, x, f, v):
         """
@@ -127,9 +119,6 @@ class BO_algo:
             Model training speed
         """
         # TODO: enter your code here
-        self.f_model.fit(x.reshape(1, -1), f)
-        self.v_model.fit(x.reshape(1, -1), v-self.v_mean)
-
         if self.x is None:
             self.x = x
             self.f = f
@@ -138,6 +127,10 @@ class BO_algo:
             self.x = np.vstack((self.x, x))
             self.f = np.vstack((self.f, f))
             self.v = np.vstack((self.v, v))
+
+        self.f_model.fit(self.x, self.f)
+        self.v_model.fit(self.x, self.v)
+
         return
 
     def get_solution(self):
