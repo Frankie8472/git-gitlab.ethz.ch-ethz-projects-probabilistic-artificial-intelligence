@@ -149,11 +149,10 @@ class BO_algo:
             1 x domain.shape[0] array containing the optimal solution of the problem
         """
         # TODO: enter your code here
-        solution = None
+        solution = domain[:, 0]
         for idx, item in enumerate(self.x):
-            if self.v[idx][0] >= self.v_min and (solution is None or item[0] > solution):
+            if self.v[idx][0] >= self.v_min and item[0] > solution:
                 solution = item[0]
-        print("end")
         return solution
 
 
