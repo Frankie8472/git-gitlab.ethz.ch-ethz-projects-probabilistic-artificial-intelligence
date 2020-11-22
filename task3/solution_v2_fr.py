@@ -1,32 +1,46 @@
+import warnings
+
+warnings.filterwarnings("ignore")
+
 import numpy as np
+from sklearn.gaussian_process.kernels import Matern
+from sklearn.gaussian_process import GaussianProcessRegressor
 from scipy.optimize import fmin_l_bfgs_b
-from GPyOpt.methods import BayesianOptimization
-from GPy.kern import Matern52
 
 domain = np.array([[0, 5]])
 
+# TODO machen das man es reproduzieren kann
 """ Solution """
 
 
-class BO_algo():
+class BO_algo:
     def __init__(self):
         """Initializes the algorithm with a parameter configuration. """
-        self.bounds = np.array([[0.0, 5.0]])
-        self.sigma_f = 0.15
-        self.sigma_v = 0.0001
-        self.noise_f = None
-        self.noise_v = None
-        self.bds = [{'name': 'X', 'type': 'continuous', 'domain': self.bounds.ravel()}]
-        self.kernel_f = Matern52(input_dim=1, lengthscale=0.5, variance=0.5)
-        self.kernel_v = Matern52(input_dim=1, lengthscale=0.5, variance=2 ** (1 / 2))
+
+        # TODO: enter your code here
+        self.seed = 42
+
+        self.domain = np.array([[0.0, 5.0]])
+
+        self.f_sigma = 0.5
+        self.f_lengthscale = 0.5
+        self.f_nu = 2.5
+
+        self.v_sigma = np.sqrt(2)
+        self.v_lengthscale = 0.5
+        self.v_nu = 2.5
+        self.v_mean = 1.5
         self.v_min = 1.2
-        self.optimizer_f = None
-        self.optimizer_v = None
 
         self.x = np.random.rand(4, 1) * 5
         self.y = None
         self.v = None
-        # TODO: enter your code here
+
+        self.f_kernel = self.f_sigma ** 2 * Matern(length_scale=self.f_lengthscale, length_scale_bounds='fixed', nu=self.f_nu)
+        self.f_model = GaussianProcessRegressor(kernel=self.f_kernel, random_state=self.seed)
+
+        self.v_kernel = self.v_mean + (self.v_sigma ** 2 * Matern(length_scale=self.v_lengthscale, length_scale_bounds='fixed', nu=self.v_nu))
+        self.v_model = GaussianProcessRegressor(kernel=self.v_kernel, random_state=self.seed)
         return
 
     def next_recommendation(self):
@@ -40,11 +54,11 @@ class BO_algo():
         """
 
         # TODO: enter your code here
-        if self.y is None:
-            pass
-
         # In implementing this function, you may use optimize_acquisition_function() defined below.
-        raise NotImplementedError
+        if self.y is None:
+            return self.x
+
+        return self.optimize_acquisition_function()
 
     def optimize_acquisition_function(self):
         """
@@ -72,7 +86,7 @@ class BO_algo():
             f_values.append(-result[1])
 
         ind = np.argmax(f_values)
-        return np.atleast_2d(x_values[ind])
+        return np.atleast_2d(x_values[ind])  # [[somenumber]]
 
     def acquisition_function(self, x):
         """
@@ -90,7 +104,14 @@ class BO_algo():
         """
 
         # TODO: enter your code here
-        raise NotImplementedError
+        y_mean, y_std = self.f_model.predict(x.reshape(1, -1), return_std=True)
+        y_sample_mean = self.f_model.predict(self.x)
+
+        y_sample_mean_opt = np.max(y_sample_mean)
+
+        beta = 0.0001
+        af_value = y_mean[0] + beta * y_std[0]
+        return af_value
 
     def add_data_point(self, x, f, v):
         """
@@ -106,23 +127,19 @@ class BO_algo():
             Model training speed
         """
 
-        if self.optimizer_f is None:
-            self.y = f(x)
-            self.optimizer_f = BayesianOptimization(
-                f=f,
-                domain=self.bds,
-                model_type='GP',
-                kernel=self.kernel_f,
-                acquisition_type='',
-                acquisition_jitter=0.01,
-                X=self.x,
-                Y=-f,
-                noise_var=noise ** 2,
-                exact_feval=False,
-                normalize_Y=False,
-                maximize=True)
         # TODO: enter your code here
-        raise NotImplementedError
+        self.x = np.vstack((self.x, x))
+
+        if self.y is None and self.v is None:
+            self.y = f
+            self.v = v
+        else:
+            self.y = np.vstack((self.y, f))
+            self.v = np.vstack((self.v, v))
+
+        self.f_model.fit(self.x, self.y)
+        self.v_model.fit(self.x, self.v)
+        return
 
     def get_solution(self):
         """
@@ -133,9 +150,15 @@ class BO_algo():
         solution: np.ndarray
             1 x domain.shape[0] array containing the optimal solution of the problem
         """
-
         # TODO: enter your code here
-        raise NotImplementedError
+        y_sol = 0
+        v_sol = 0
+        for idx, item in enumerate(self.x):
+            if item < y_sol and self.v[idx] >= self.v_min:
+                y_sol = item
+                v_sol = self.v[idx]
+
+        return y_sol
 
 
 """ Toy problem to check code works as expected """
