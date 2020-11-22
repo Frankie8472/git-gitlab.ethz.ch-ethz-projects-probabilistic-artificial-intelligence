@@ -33,12 +33,13 @@ class BO_algo:
         self.v_min = 1.2
 
         self.x = np.random.rand(4, 1) * 5
-        self.y = None
+        self.f = None
         self.v = None
 
         self.f_kernel = self.f_sigma ** 2 * Matern(length_scale=self.f_lengthscale, length_scale_bounds='fixed', nu=self.f_nu)
         self.f_model = GaussianProcessRegressor(kernel=self.f_kernel, random_state=self.seed)
 
+        # TODO find out if mean is correctly added
         self.v_kernel = self.v_mean + (self.v_sigma ** 2 * Matern(length_scale=self.v_lengthscale, length_scale_bounds='fixed', nu=self.v_nu))
         self.v_model = GaussianProcessRegressor(kernel=self.v_kernel, random_state=self.seed)
         return
@@ -55,10 +56,11 @@ class BO_algo:
 
         # TODO: enter your code here
         # In implementing this function, you may use optimize_acquisition_function() defined below.
-        if self.y is None:
-            return self.x
-
-        return self.optimize_acquisition_function()
+        if self.f is None:
+            recommendation = self.x
+        else:
+            recommendation = self.optimize_acquisition_function()
+        return recommendation
 
     def optimize_acquisition_function(self):
         """
@@ -104,13 +106,14 @@ class BO_algo:
         """
 
         # TODO: enter your code here
-        y_mean, y_std = self.f_model.predict(x.reshape(1, -1), return_std=True)
-        y_sample_mean = self.f_model.predict(self.x)
+        f_mean, f_std = self.f_model.predict(x.reshape(1, -1), return_std=True)
+        v_mean, v_std = self.v_model.predict(x.reshape(1, -1), return_std=True)
 
-        y_sample_mean_opt = np.max(y_sample_mean)
+        beta = 0.0001   # TODO: Hyperparameter tuning of beta
+        v = v_mean + v_std  # TODO: correct calculation of v?
 
-        beta = 0.0001
-        af_value = y_mean[0] + beta * y_std[0]
+        # A larger v means more exploration, a smaller v means more exploitation
+        af_value = f_mean[0] + beta/v * f_std[0]
         return af_value
 
     def add_data_point(self, x, f, v):
@@ -126,19 +129,18 @@ class BO_algo:
         v: np.ndarray
             Model training speed
         """
-
         # TODO: enter your code here
+        self.f_model.fit(x, f)
+        self.v_model.fit(x, v)
+
         self.x = np.vstack((self.x, x))
 
-        if self.y is None and self.v is None:
-            self.y = f
+        if self.f is None:
+            self.f = f
             self.v = v
         else:
-            self.y = np.vstack((self.y, f))
+            self.f = np.vstack((self.f, f))
             self.v = np.vstack((self.v, v))
-
-        self.f_model.fit(self.x, self.y)
-        self.v_model.fit(self.x, self.v)
         return
 
     def get_solution(self):
@@ -151,14 +153,11 @@ class BO_algo:
             1 x domain.shape[0] array containing the optimal solution of the problem
         """
         # TODO: enter your code here
-        y_sol = 0
-        v_sol = 0
+        solution = None
         for idx, item in enumerate(self.x):
-            if item < y_sol and self.v[idx] >= self.v_min:
-                y_sol = item
-                v_sol = self.v[idx]
-
-        return y_sol
+            if self.v[idx][0] >= self.v_min and (solution is None or item[0] > solution):
+                solution = item[0]
+        return solution
 
 
 """ Toy problem to check code works as expected """
