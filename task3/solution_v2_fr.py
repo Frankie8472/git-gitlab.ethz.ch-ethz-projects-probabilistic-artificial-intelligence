@@ -4,7 +4,8 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 from scipy.optimize import fmin_l_bfgs_b
 import warnings
 warnings.filterwarnings("ignore")
-
+seed = 42
+np.random.seed(seed)
 domain = np.array([[0, 5]])
 
 # TODO machen das man es reproduzieren kann
@@ -34,12 +35,12 @@ class BO_algo:
         self.f = None
         self.v = None
 
-        self.f_kernel = self.f_sigma ** 2 * Matern(length_scale=self.f_lengthscale, length_scale_bounds='fixed', nu=self.f_nu)
-        self.f_model = GaussianProcessRegressor(kernel=self.f_kernel, random_state=self.seed)
+        self.f_kernel = self.f_sigma * Matern(length_scale=self.f_lengthscale, length_scale_bounds='fixed', nu=self.f_nu)
+        self.f_model = GaussianProcessRegressor(kernel=self.f_kernel, random_state=seed)
 
         # TODO find out if mean is correctly added
-        self.v_kernel = self.v_mean + (self.v_sigma ** 2 * Matern(length_scale=self.v_lengthscale, length_scale_bounds='fixed', nu=self.v_nu))
-        self.v_model = GaussianProcessRegressor(kernel=self.v_kernel, random_state=self.seed)
+        self.v_kernel = self.v_sigma * Matern(length_scale=self.v_lengthscale, length_scale_bounds='fixed', nu=self.v_nu)
+        self.v_model = GaussianProcessRegressor(kernel=self.v_kernel, random_state=seed)
         return
 
     def next_recommendation(self):
@@ -105,8 +106,8 @@ class BO_algo:
         f_mean, f_std = self.f_model.predict(x.reshape(1, -1), return_std=True)
         v_mean, v_std = self.v_model.predict(x.reshape(1, -1), return_std=True)
 
-        beta = 0.0001   # TODO: Hyperparameter tuning of beta
-        v = v_mean + v_std  # TODO: correct calculation of v?
+        beta = 1   # TODO: Hyperparameter tuning of beta
+        v = self.v_mean + v_mean[0] - v_std[0]
 
         # A larger v means more exploration, a smaller v means more exploitation
         af_value = f_mean[0] + beta/v * f_std[0]
@@ -126,6 +127,7 @@ class BO_algo:
             Model training speed
         """
         # TODO: enter your code here
+        v -= self.v_mean
         self.f_model.fit(x.reshape(1, -1), f)
         self.v_model.fit(x.reshape(1, -1), v)
 
