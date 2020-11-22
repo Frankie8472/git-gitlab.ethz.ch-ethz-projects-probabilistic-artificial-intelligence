@@ -127,9 +127,8 @@ class BO_algo:
             Model training speed
         """
         # TODO: enter your code here
-        v -= self.v_mean
         self.f_model.fit(x.reshape(1, -1), f)
-        self.v_model.fit(x.reshape(1, -1), v)
+        self.v_model.fit(x.reshape(1, -1), v-self.v_mean)
 
         if self.x is None:
             self.x = x
