@@ -148,13 +148,15 @@ class BO_algo:
         f_mean, f_std = self.f_model.predict(x.reshape(1, -1), return_std=True)
         v_mean, v_std = self.v_model.predict(x.reshape(1, -1), return_std=True)
 
-        # Lower Confidence Bound
+        # Expected speed
         v = v_mean[0]
 
+        # Relu around 1.2 instead of 0.0
         if v < self.v_min:
+            # Set to lowest value
             af_value = domain[:, 0]
         else:
-            # Upper Confidence Bound
+            # Upper Confidence Bound, max exploration
             af_value = f_mean[0] + f_std[0]
         return af_value
 
