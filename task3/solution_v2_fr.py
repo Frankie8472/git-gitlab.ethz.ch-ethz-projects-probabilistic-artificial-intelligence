@@ -149,7 +149,7 @@ class BO_algo:
         v_mean, v_std = self.v_model.predict(x.reshape(1, -1), return_std=True)
 
         # Lower Confidence Bound
-        v = v_mean[0] - v_std[0]
+        v = v_mean[0]
 
         if v < self.v_min:
             af_value = domain[:, 0]
