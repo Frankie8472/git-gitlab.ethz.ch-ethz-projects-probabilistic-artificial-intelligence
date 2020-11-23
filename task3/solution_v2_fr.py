@@ -3,12 +3,12 @@ from sklearn.gaussian_process.kernels import Matern, ConstantKernel, WhiteKernel
 from sklearn.gaussian_process import GaussianProcessRegressor
 from scipy.optimize import fmin_l_bfgs_b
 import warnings
-warnings.filterwarnings("ignore")
+
 seed = 42
-np.random.seed(seed)
+np.random.seed(seed=seed)
+warnings.filterwarnings("ignore")
 domain = np.array([[0, 5]])
 
-# TODO machen das man es reproduzieren kann
 """ Solution """
 
 
@@ -17,12 +17,14 @@ class BO_algo:
         """Initializes the algorithm with a parameter configuration. """
 
         # TODO: enter your code here
-        self.f_sigma = 0.15
+        self.f_noise_sigma = 0.15
+        self.f_noise_var = self.f_noise_sigma**2
         self.f_var = 0.5
         self.f_lengthscale = 0.5
         self.f_nu = 2.5
 
-        self.v_sigma = 0.0001
+        self.v_noise_sigma = 0.0001
+        self.v_noise_var = self.v_noise_sigma**2
         self.v_var = np.sqrt(2)
         self.v_lengthscale = 0.5
         self.v_nu = 2.5
@@ -33,11 +35,56 @@ class BO_algo:
         self.f = None
         self.v = None
 
-        self.f_kernel = Product(ConstantKernel(self.f_var, 'fixed'), Matern(self.f_lengthscale, 'fixed', self.f_nu))
-        self.f_model = GaussianProcessRegressor(self.f_kernel, self.f_sigma, seed)
+        self.f_kernel = Sum(
+            Product(
+                ConstantKernel(
+                    constant_value=self.f_var,
+                    constant_value_bounds='fixed'
+                ),
+                Matern(
+                    length_scale=self.f_lengthscale,
+                    length_scale_bounds='fixed',
+                    nu=self.f_nu)
+            ),
+            WhiteKernel(
+                noise_level=self.f_noise_var,
+                noise_level_bounds='fixed'
+            )
+        )
+        self.f_model = GaussianProcessRegressor(
+            kernel=self.f_kernel,
+            alpha=0.0,  # Already in Noise kernel
+            random_state=seed
+        )
 
-        self.v_kernel = Sum(ConstantKernel(self.v_mean, 'fixed'), Product(ConstantKernel(self.v_var, 'fixed'), Matern(self.v_lengthscale, 'fixed', self.v_nu)))
-        self.v_model = GaussianProcessRegressor(self.v_kernel, self.v_sigma, seed)
+        self.v_kernel = Sum(
+            Sum(
+                ConstantKernel(
+                    constant_value=self.v_mean,
+                    constant_value_bounds='fixed'
+                ),
+                Product(
+                    ConstantKernel(
+                        constant_value=self.v_var,
+                        constant_value_bounds='fixed'
+                    ),
+                    Matern(
+                        length_scale=self.v_lengthscale,
+                        length_scale_bounds='fixed',
+                        nu=self.v_nu
+                    )
+                )
+            ),
+            WhiteKernel(
+                noise_level=self.v_noise_var,
+                noise_level_bounds='fixed'
+            )
+        )
+        self.v_model = GaussianProcessRegressor(
+            kernel=self.v_kernel,
+            alpha=0.0,  # Already in noise kernel
+            random_state=seed
+        )
         return
 
     def next_recommendation(self):
@@ -52,7 +99,9 @@ class BO_algo:
 
         # TODO: enter your code here
         # In implementing this function, you may use optimize_acquisition_function() defined below.
-        return self.optimize_acquisition_function()
+        recommendation = self.optimize_acquisition_function()
+
+        return recommendation
 
     def optimize_acquisition_function(self):
         """
@@ -99,11 +148,15 @@ class BO_algo:
         f_mean, f_std = self.f_model.predict(x.reshape(1, -1), return_std=True)
         v_mean, v_std = self.v_model.predict(x.reshape(1, -1), return_std=True)
 
+        # Lower Confidence Bound
         v = v_mean[0] - v_std[0]
 
         if v < self.v_min:
-            return domain[:, 0]
-        return f_mean[0] + (self.v_min/v)**2*f_std[0]
+            af_value = domain[:, 0]
+        else:
+            # Upper Confidence Bound
+            af_value = f_mean[0] + f_std[0]
+        return af_value
 
     def add_data_point(self, x, f, v):
         """
@@ -144,9 +197,11 @@ class BO_algo:
         """
         # TODO: enter your code here
         solution = domain[:, 0]
+        f = 0
         for idx, item in enumerate(self.x):
             if self.v[idx][0] >= self.v_min and item[0] > solution:
                 solution = item[0]
+                f = self.f[idx][0]
         return solution
 
 
@@ -162,12 +217,12 @@ def check_in_domain(x):
 def f(x):
     """Dummy objective"""
     mid_point = domain[:, 0] + 0.5 * (domain[:, 1] - domain[:, 0])
-    return - np.linalg.norm(x - mid_point, 2)  # -(x - 2.5)^2
+    return np.asarray([- np.linalg.norm(x - mid_point, 2)])  # -(x - 2.5)^2
 
 
 def v(x):
     """Dummy speed"""
-    return 2.0
+    return np.sin(x)
 
 
 def main():
@@ -180,11 +235,11 @@ def main():
         x = agent.next_recommendation()
 
         # Check for valid shape
-        """"
+
         assert x.shape == (1, domain.shape[0]), \
             f"The function next recommendation must return a numpy array of " \
             f"shape (1, {domain.shape[0]})"
-        """
+
         # Obtain objective and constraint observation
         obj_val = f(x)
         cost_val = v(x)
@@ -206,7 +261,7 @@ def main():
         regret = (0 - f(solution))
 
     print(f'Optimal value: 0\nProposed solution {solution}\nSolution value '
-          f'{f(solution)}\nRegret{regret}')
+          f'{f(solution)}\nRegret {regret}')
 
 
 if __name__ == "__main__":
